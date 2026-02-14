@@ -1,3 +1,7 @@
+import laika.helium.Helium
+import laika.helium.config._
+import laika.ast.Path.Root
+
 // https://typelevel.org/sbt-typelevel/faq.html#what-is-a-base-version-anyway
 ThisBuild / tlBaseVersion := "0.0" // your current series x.y
 
@@ -45,4 +49,15 @@ lazy val fs2 = crossProject(JVMPlatform, JSPlatform)
     )
   )
 
-lazy val docs = project.in(file("site")).enablePlugins(TypelevelSitePlugin)
+lazy val docs = project
+  .in(file("site"))
+  .enablePlugins(TypelevelSitePlugin)
+  .settings(
+    tlFatalWarnings := false,
+    laikaTheme := Helium.defaults.site
+      .topNavigationBar(
+        homeLink = IconLink.internal(Root / "index.md", HeliumIcon.home)
+      )
+      .build
+  )
+  .dependsOn(core.jvm, fs2.jvm)
