@@ -1,7 +1,6 @@
 package com.codiff.fairstream
 package fs2
 
-import cats.Monad
 import _root_.fs2.{Pull, Pure, Stream}
 
 object conversions {
@@ -16,9 +15,7 @@ object conversions {
     go(fair).stream
   }
 
-  def fairTToStream[F[_], A](fairT: FairT[F, A])(implicit
-      F: Monad[F]
-  ): Stream[F, A] = {
+  def fairTToStream[F[_], A](fairT: FairT[F, A]): Stream[F, A] = {
     def go(ft: FairT[F, A]): Pull[F, A, Unit] =
       Pull.eval(ft.run).flatMap {
         case FairE.Nil()  => Pull.done

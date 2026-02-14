@@ -109,7 +109,9 @@ class FairFs2Suite extends CatsEffectSuite {
 
   // -- Plain fs2.Stream vs Fair interleaving --
 
-  test("plain fs2.Stream cannot find pythagorean triples (depth-first gets stuck)") {
+  test(
+    "plain fs2.Stream cannot find pythagorean triples (depth-first gets stuck)"
+  ) {
     // Plain fs2.Stream uses depth-first (sequential) flatMap: for i=1, j=1 it
     // tries k=1,2,3,... forever, never advancing j or i. So it cannot produce
     // even a single triple from an infinite number stream within a budget.

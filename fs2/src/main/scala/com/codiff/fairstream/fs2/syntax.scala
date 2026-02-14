@@ -1,7 +1,6 @@
 package com.codiff.fairstream
 package fs2
 
-import cats.Monad
 import _root_.fs2.{Pure, Stream}
 
 object syntax {
@@ -11,7 +10,7 @@ object syntax {
   }
 
   implicit class FairTFs2Ops[F[_], A](val fairT: FairT[F, A]) extends AnyVal {
-    def toFs2(implicit F: Monad[F]): Stream[F, A] =
+    def toFs2: Stream[F, A] =
       conversions.fairTToStream(fairT)
   }
 
