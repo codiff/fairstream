@@ -6,7 +6,7 @@
 
 ### Motivation
 
-The problem with depth-first search `flatMap` of [https://fs2.io/](`fs2.Stream`) and standard library's collection is that when you nest infinite streams, it gets stuck exploring the first branch forever:
+The problem with depth-first search `flatMap` of [`fs2.Stream`](https://fs2.io/) and standard library's collection is that when you nest infinite streams, it gets stuck exploring the first branch forever:
 
 ```scala
 val number = fs2.Stream.iterate(1)(_ + 1) // 1, 2, 3, ...
