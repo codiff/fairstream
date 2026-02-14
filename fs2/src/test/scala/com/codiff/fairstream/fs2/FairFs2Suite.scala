@@ -17,11 +17,11 @@
 package com.codiff.fairstream
 package fs2
 
-import scala.concurrent.duration._
-
 import cats.effect.IO
 import cats.syntax.all._
 import munit.CatsEffectSuite
+
+import scala.concurrent.duration._
 
 import syntax._
 

@@ -16,7 +16,10 @@
 
 package com.codiff.fairstream
 
-import cats.{Alternative, Applicative, Monad, ~>}
+import cats.Alternative
+import cats.Applicative
+import cats.Monad
+import cats.~>
 
 sealed trait FairE[M[_], A]
 

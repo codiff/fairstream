@@ -17,7 +17,8 @@
 package com.codiff.fairstream
 package fs2
 
-import _root_.fs2.{Pure, Stream}
+import _root_.fs2.Pure
+import _root_.fs2.Stream
 
 object syntax {
 
