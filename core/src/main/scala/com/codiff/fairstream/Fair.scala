@@ -36,14 +36,14 @@ object Fair {
   def guard(cond: Boolean): Fair[Unit] = if (cond) unit(()) else empty
 
   def mplus[A](left: Fair[A], right: => Fair[A]): Fair[A] = left match {
-    case Nil     => Incomplete(right)
-    case One(a)  => Choice(a, right)
+    case Nil                     => Incomplete(right)
+    case One(a)                  => Choice(a, right)
     case c: Choice[A @unchecked] => Choice(c.a, mplus(right, c.rest))
     case inc: Incomplete[A @unchecked] =>
       right match {
         case Nil           => inc
         case One(b)        => Choice(b, inc.step)
-        case Choice(b, r2) => Choice(b, Incomplete(mplus(inc.step, r2)))
+        case Choice(b, r2) => Choice(b, mplus(inc.step, r2))
         case Incomplete(j) => Incomplete(mplus(inc.step, j))
       }
   }
@@ -58,8 +58,8 @@ object Fair {
     if (maxResults.exists(_ <= 0)) acc.reverse
     else
       stream match {
-        case Nil     => acc.reverse
-        case One(a)  => (a :: acc).reverse
+        case Nil    => acc.reverse
+        case One(a) => (a :: acc).reverse
         case Choice(a, r) =>
           runM(maxDepth, maxResults.map(_ - 1), r, a :: acc)
         case Incomplete(i) =>
@@ -76,8 +76,8 @@ object Fair {
       def pure[A](a: A): Fair[A] = Fair.unit(a)
 
       def flatMap[A, B](fa: Fair[A])(f: A => Fair[B]): Fair[B] = fa match {
-        case Nil           => Nil
-        case One(a)        => f(a)
+        case Nil    => Nil
+        case One(a) => f(a)
         case c: Choice[A @unchecked] =>
           combineK(f(c.a), Incomplete(flatMap(c.rest)(f)))
         case i: Incomplete[A @unchecked] =>

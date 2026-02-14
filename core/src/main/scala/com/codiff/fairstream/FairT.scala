@@ -12,16 +12,21 @@ object FairE {
   }
 
   object Choice {
-    def apply[M[_], A](a: A, expr: => FairT[M, A]): Choice[M, A] = new Choice(a, expr)
+    def apply[M[_], A](a: A, expr: => FairT[M, A]): Choice[M, A] =
+      new Choice(a, expr)
 
-    def unapply[M[_], A](s: Choice[M, A]): Some[(A, FairT[M, A])] = Some((s.a, s.rest))
+    def unapply[M[_], A](s: Choice[M, A]): Some[(A, FairT[M, A])] = Some(
+      (s.a, s.rest)
+    )
   }
   class Incomplete[M[_], A](expr: => FairT[M, A]) extends FairE[M, A] {
     lazy val rest: FairT[M, A] = expr
   }
 
   object Incomplete {
-    def apply[M[_], A](expr: => FairT[M, A]): Incomplete[M, A] = new Incomplete(expr)
+    def apply[M[_], A](expr: => FairT[M, A]): Incomplete[M, A] = new Incomplete(
+      expr
+    )
 
     def unapply[M[_], A](s: Incomplete[M, A]): Some[FairT[M, A]] = Some(s.rest)
   }
@@ -63,7 +68,7 @@ object FairT {
           case FairE.Nil()  => M.pure[E](inc)
           case FairE.One(b) => M.pure[E](FairE.Choice(b, inc.rest))
           case rc: FairE.Choice[M, A] @unchecked =>
-            M.pure[E](FairE.Choice(rc.a, FairT(M.pure[E](FairE.Incomplete(mplus(inc.rest, rc.rest))))))
+            M.pure[E](FairE.Choice(rc.a, mplus(inc.rest, rc.rest)))
           case rinc: FairE.Incomplete[M, A] @unchecked =>
             M.pure[E](FairE.Incomplete(mplus(inc.rest, rinc.rest)))
         }
@@ -75,8 +80,8 @@ object FairT {
   )(f: A => FairT[M, B])(implicit M: Monad[M]): FairT[M, B] = {
     type EB = FairE[M, B]
     FairT(M.flatMap[FairE[M, A], EB](fa.run) {
-      case FairE.Nil()        => M.pure[EB](FairE.Nil())
-      case FairE.One(a)       => f(a).run
+      case FairE.Nil()  => M.pure[EB](FairE.Nil())
+      case FairE.One(a) => f(a).run
       case c: FairE.Choice[M, A] @unchecked =>
         mplus(f(c.a), suspend(flatMap(c.rest)(f))).run
       case i: FairE.Incomplete[M, A] @unchecked =>
@@ -92,8 +97,8 @@ object FairT {
     if (maxResults.exists(_ <= 0)) M.pure(List.empty)
     else
       M.flatMap(stream.run) {
-        case FairE.Nil()   => M.pure(List.empty)
-        case FairE.One(a)  => M.pure(List(a))
+        case FairE.Nil()  => M.pure(List.empty)
+        case FairE.One(a) => M.pure(List(a))
         case c: FairE.Choice[M, A] @unchecked =>
           M.map(runM(maxDepth, maxResults.map(_ - 1), c.rest))(c.a :: _)
         case inc: FairE.Incomplete[M, A] @unchecked =>
@@ -125,7 +130,8 @@ object FairT {
             case FairE.One(Left(a))  => Left(a)
             case FairE.One(Right(b)) => Right(FairE.One(b))
             case c: FairE.Choice[M, Either[A, B]] @unchecked =>
-              val rest: FairT[M, B] = FairT.flatMap[M, Either[A, B], B](c.rest)(cont)
+              val rest: FairT[M, B] =
+                FairT.flatMap[M, Either[A, B], B](c.rest)(cont)
               c.a match {
                 case Right(b) => Right(FairE.Choice(b, rest))
                 case Left(a) =>
@@ -133,7 +139,9 @@ object FairT {
               }
             case inc: FairE.Incomplete[M, Either[A, B]] @unchecked =>
               Right(
-                FairE.Incomplete(FairT.flatMap[M, Either[A, B], B](inc.rest)(cont))
+                FairE.Incomplete(
+                  FairT.flatMap[M, Either[A, B], B](inc.rest)(cont)
+                )
               )
           }
         })

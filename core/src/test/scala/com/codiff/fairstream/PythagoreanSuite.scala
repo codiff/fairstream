@@ -36,7 +36,8 @@ class PythagoreanSuite extends FunSuite {
   test("Fair: pythagorean triples with left recursion") {
     import Fair._
 
-    lazy val number: Fair[Int] = mplus((Incomplete(number): Fair[Int]).map(_ + 1), unit(0))
+    lazy val number: Fair[Int] =
+      mplus((Incomplete(number): Fair[Int]).map(_ + 1), unit(0))
 
     val triples = for {
       i <- number
@@ -73,7 +74,8 @@ class PythagoreanSuite extends FunSuite {
       _ <- guardF(i * i + j * j == k * k)
     } yield (i, j, k)
 
-    val results = FairT.runM[Eval, (Int, Int, Int)](None, Some(7), triples).value
+    val results =
+      FairT.runM[Eval, (Int, Int, Int)](None, Some(7), triples).value
     assertEquals(results.length, 7)
     assert(results.forall(isPythagorean))
   }
@@ -92,7 +94,8 @@ class PythagoreanSuite extends FunSuite {
       _ <- guardF(i * i + j * j == k * k)
     } yield (i, j, k)
 
-    val results = FairT.runM[Eval, (Int, Int, Int)](None, Some(27), triples).value
+    val results =
+      FairT.runM[Eval, (Int, Int, Int)](None, Some(27), triples).value
     assertEquals(results.length, 27)
     assert(results.forall(isPythagorean))
   }
