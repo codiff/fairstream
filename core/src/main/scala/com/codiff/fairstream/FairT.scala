@@ -1,14 +1,30 @@
 package com.codiff.fairstream
 
-import cats.{Alternative, Applicative, Monad}
+import cats.{Alternative, Applicative, Monad, ~>}
 
 sealed trait FairE[M[_], A]
 
 object FairE {
   final case class Nil[M[_], A]() extends FairE[M, A]
   final case class One[M[_], A](a: A) extends FairE[M, A]
-  final case class Choice[M[_], A](a: A, rest: FairT[M, A]) extends FairE[M, A]
-  final case class Incomplete[M[_], A](rest: FairT[M, A]) extends FairE[M, A]
+  class Choice[M[_], A](val a: A, expr: => FairT[M, A]) extends FairE[M, A] {
+    lazy val rest: FairT[M, A] = expr
+  }
+
+  object Choice {
+    def apply[M[_], A](a: A, expr: => FairT[M, A]): Choice[M, A] = new Choice(a, expr)
+
+    def unapply[M[_], A](s: Choice[M, A]): Some[(A, FairT[M, A])] = Some((s.a, s.rest))
+  }
+  class Incomplete[M[_], A](expr: => FairT[M, A]) extends FairE[M, A] {
+    lazy val rest: FairT[M, A] = expr
+  }
+
+  object Incomplete {
+    def apply[M[_], A](expr: => FairT[M, A]): Incomplete[M, A] = new Incomplete(expr)
+
+    def unapply[M[_], A](s: Incomplete[M, A]): Some[FairT[M, A]] = Some(s.rest)
+  }
 }
 
 final case class FairT[M[_], A](run: M[FairE[M, A]])
@@ -20,25 +36,36 @@ object FairT {
   def unit[M[_], A](a: A)(implicit M: Applicative[M]): FairT[M, A] =
     FairT(M.pure[FairE[M, A]](FairE.One(a)))
 
-  def suspend[M[_], A](s: FairT[M, A])(implicit
+  def suspend[M[_], A](s: => FairT[M, A])(implicit
       M: Applicative[M]
   ): FairT[M, A] =
     FairT(M.pure[FairE[M, A]](FairE.Incomplete(s)))
+
+  def lift[M[_], A](ma: M[A])(implicit M: Monad[M]): FairT[M, A] =
+    FairT(M.map(ma)(a => FairE.One[M, A](a): FairE[M, A]))
+
+  def liftK[M[_]](implicit M: Monad[M]): M ~> FairT[M, *] =
+    new (M ~> FairT[M, *]) {
+      def apply[A](ma: M[A]): FairT[M, A] = lift(ma)
+    }
 
   def mplus[M[_], A](left: FairT[M, A], right: => FairT[M, A])(implicit
       M: Monad[M]
   ): FairT[M, A] = {
     type E = FairE[M, A]
     FairT(M.flatMap[E, E](left.run) {
-      case FairE.Nil()        => M.pure[E](FairE.Incomplete(right))
-      case FairE.One(a)       => M.pure[E](FairE.Choice(a, right))
-      case FairE.Choice(a, r) => M.pure[E](FairE.Choice(a, mplus(right, r)))
-      case FairE.Incomplete(i) =>
-        M.map[E, E](right.run) {
-          case FairE.Nil()         => FairE.Incomplete(i)
-          case FairE.One(b)        => FairE.Choice(b, i)
-          case FairE.Choice(b, r2) => FairE.Choice(b, mplus(i, r2))
-          case FairE.Incomplete(j) => FairE.Incomplete(mplus(i, j))
+      case FairE.Nil()  => M.pure[E](FairE.Incomplete(right))
+      case FairE.One(a) => M.pure[E](FairE.Choice(a, right))
+      case c: FairE.Choice[M, A] @unchecked =>
+        M.pure[E](FairE.Choice(c.a, mplus(right, c.rest)))
+      case inc: FairE.Incomplete[M, A] @unchecked =>
+        M.flatMap[E, E](right.run) {
+          case FairE.Nil()  => M.pure[E](inc)
+          case FairE.One(b) => M.pure[E](FairE.Choice(b, inc.rest))
+          case rc: FairE.Choice[M, A] @unchecked =>
+            M.pure[E](FairE.Choice(rc.a, FairT(M.pure[E](FairE.Incomplete(mplus(inc.rest, rc.rest))))))
+          case rinc: FairE.Incomplete[M, A] @unchecked =>
+            M.pure[E](FairE.Incomplete(mplus(inc.rest, rinc.rest)))
         }
     })
   }
@@ -48,11 +75,31 @@ object FairT {
   )(f: A => FairT[M, B])(implicit M: Monad[M]): FairT[M, B] = {
     type EB = FairE[M, B]
     FairT(M.flatMap[FairE[M, A], EB](fa.run) {
-      case FairE.Nil()         => M.pure[EB](FairE.Nil())
-      case FairE.One(a)        => f(a).run
-      case FairE.Choice(a, r)  => mplus(f(a), suspend(flatMap(r)(f))).run
-      case FairE.Incomplete(i) => M.pure[EB](FairE.Incomplete(flatMap(i)(f)))
+      case FairE.Nil()        => M.pure[EB](FairE.Nil())
+      case FairE.One(a)       => f(a).run
+      case c: FairE.Choice[M, A] @unchecked =>
+        mplus(f(c.a), suspend(flatMap(c.rest)(f))).run
+      case i: FairE.Incomplete[M, A] @unchecked =>
+        M.pure[EB](FairE.Incomplete(flatMap(i.rest)(f)))
     })
+  }
+
+  def runM[M[_], A](
+      maxDepth: Option[Int],
+      maxResults: Option[Int],
+      stream: FairT[M, A]
+  )(implicit M: Monad[M]): M[List[A]] = {
+    if (maxResults.exists(_ <= 0)) M.pure(List.empty)
+    else
+      M.flatMap(stream.run) {
+        case FairE.Nil()   => M.pure(List.empty)
+        case FairE.One(a)  => M.pure(List(a))
+        case c: FairE.Choice[M, A] @unchecked =>
+          M.map(runM(maxDepth, maxResults.map(_ - 1), c.rest))(c.a :: _)
+        case inc: FairE.Incomplete[M, A] @unchecked =>
+          if (maxDepth.exists(_ <= 0)) M.pure(List.empty)
+          else runM(maxDepth.map(_ - 1), maxResults, inc.rest)
+      }
   }
 
   implicit def fairTMonad[M[_]: Monad]
@@ -65,11 +112,32 @@ object FairT {
       def flatMap[A, B](fa: FairT[M, A])(f: A => FairT[M, B]): FairT[M, B] =
         FairT.flatMap(fa)(f)
 
-      def tailRecM[A, B](a: A)(f: A => FairT[M, Either[A, B]]): FairT[M, B] =
-        flatMap(f(a)) {
-          case Left(next) => tailRecM(next)(f)
-          case Right(b)   => FairT.unit(b)
+      def tailRecM[A, B](a: A)(f: A => FairT[M, Either[A, B]]): FairT[M, B] = {
+        val MM = Monad[M]
+        type E = FairE[M, B]
+        val cont: Either[A, B] => FairT[M, B] = {
+          case Left(a)  => tailRecM(a)(f)
+          case Right(b) => FairT.unit(b)
         }
+        FairT[M, B](MM.tailRecM[A, E](a) { a =>
+          MM.map[FairE[M, Either[A, B]], Either[A, E]](f(a).run) {
+            case FairE.Nil()         => Right(FairE.Nil())
+            case FairE.One(Left(a))  => Left(a)
+            case FairE.One(Right(b)) => Right(FairE.One(b))
+            case c: FairE.Choice[M, Either[A, B]] @unchecked =>
+              val rest: FairT[M, B] = FairT.flatMap[M, Either[A, B], B](c.rest)(cont)
+              c.a match {
+                case Right(b) => Right(FairE.Choice(b, rest))
+                case Left(a) =>
+                  Right(FairE.Incomplete(mplus[M, B](tailRecM(a)(f), rest)))
+              }
+            case inc: FairE.Incomplete[M, Either[A, B]] @unchecked =>
+              Right(
+                FairE.Incomplete(FairT.flatMap[M, Either[A, B], B](inc.rest)(cont))
+              )
+          }
+        })
+      }
 
       def combineK[A](x: FairT[M, A], y: FairT[M, A]): FairT[M, A] = mplus(x, y)
     }

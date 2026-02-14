@@ -7,7 +7,15 @@ sealed trait Fair[+A]
 object Fair {
   case object Nil extends Fair[Nothing]
   case class One[+A](a: A) extends Fair[A]
-  case class Choice[+A](a: A, rest: Fair[A]) extends Fair[A]
+  class Choice[+A](val a: A, expr: => Fair[A]) extends Fair[A] {
+    lazy val rest: Fair[A] = expr
+  }
+
+  object Choice {
+    def apply[A](a: A, expr: => Fair[A]): Choice[A] = new Choice(a, expr)
+
+    def unapply[A](s: Choice[A]): Some[(A, Fair[A])] = Some((s.a, s.rest))
+  }
 
   class Incomplete[+A](expr: => Fair[A]) extends Fair[A] {
     lazy val step: Fair[A] = expr
@@ -28,15 +36,35 @@ object Fair {
   def guard(cond: Boolean): Fair[Unit] = if (cond) unit(()) else empty
 
   def mplus[A](left: Fair[A], right: => Fair[A]): Fair[A] = left match {
-    case Nil          => Incomplete(right)
-    case One(a)       => Choice(a, right)
-    case Choice(a, r) => Choice(a, mplus(right, r))
-    case Incomplete(i) =>
+    case Nil     => Incomplete(right)
+    case One(a)  => Choice(a, right)
+    case c: Choice[A @unchecked] => Choice(c.a, mplus(right, c.rest))
+    case inc: Incomplete[A @unchecked] =>
       right match {
-        case Nil           => Incomplete(i)
-        case One(b)        => Choice(b, i)
-        case Choice(b, r2) => Choice(b, Incomplete(mplus(i, r2)))
-        case Incomplete(j) => Incomplete(mplus(i, j))
+        case Nil           => inc
+        case One(b)        => Choice(b, inc.step)
+        case Choice(b, r2) => Choice(b, Incomplete(mplus(inc.step, r2)))
+        case Incomplete(j) => Incomplete(mplus(inc.step, j))
+      }
+  }
+
+  @annotation.tailrec
+  def runM[A](
+      maxDepth: Option[Int],
+      maxResults: Option[Int],
+      stream: Fair[A],
+      acc: List[A] = List.empty
+  ): List[A] = {
+    if (maxResults.exists(_ <= 0)) acc.reverse
+    else
+      stream match {
+        case Nil     => acc.reverse
+        case One(a)  => (a :: acc).reverse
+        case Choice(a, r) =>
+          runM(maxDepth, maxResults.map(_ - 1), r, a :: acc)
+        case Incomplete(i) =>
+          if (maxDepth.exists(_ <= 0)) acc.reverse
+          else runM(maxDepth.map(_ - 1), maxResults, i, acc)
       }
   }
 
@@ -50,8 +78,10 @@ object Fair {
       def flatMap[A, B](fa: Fair[A])(f: A => Fair[B]): Fair[B] = fa match {
         case Nil           => Nil
         case One(a)        => f(a)
-        case Choice(a, r)  => combineK(f(a), Incomplete(flatMap(r)(f)))
-        case Incomplete(i) => Incomplete(flatMap(i)(f))
+        case c: Choice[A @unchecked] =>
+          combineK(f(c.a), Incomplete(flatMap(c.rest)(f)))
+        case i: Incomplete[A @unchecked] =>
+          Incomplete(flatMap(i.step)(f))
       }
 
       def combineK[A](x: Fair[A], y: Fair[A]): Fair[A] = mplus(x, y)
