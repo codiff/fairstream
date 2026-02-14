@@ -45,4 +45,10 @@ lazy val fs2 = crossProject(JVMPlatform, JSPlatform)
     )
   )
 
-lazy val docs = project.in(file("site")).enablePlugins(TypelevelSitePlugin)
+lazy val docs = project
+  .in(file("site"))
+  .enablePlugins(TypelevelSitePlugin)
+  .settings(
+    tlFatalWarnings := false
+  )
+  .dependsOn(core.jvm, fs2.jvm)
