@@ -58,10 +58,11 @@ object Fair {
     case c: Choice[A @unchecked] => Choice(c.a, mplus(right, c.rest))
     case inc: Incomplete[A @unchecked] =>
       right match {
-        case Nil           => inc
-        case One(b)        => Choice(b, inc.step)
-        case Choice(b, r2) => Choice(b, mplus(inc.step, r2))
-        case Incomplete(j) => Incomplete(mplus(inc.step, j))
+        case Nil                     => inc
+        case One(b)                  => Choice(b, inc.step)
+        case c: Choice[A @unchecked] => Choice(c.a, mplus(inc.step, c.rest))
+        case inc2: Incomplete[A @unchecked] =>
+          Incomplete(mplus(inc.step, inc2.step))
       }
   }
 
@@ -77,11 +78,11 @@ object Fair {
       stream match {
         case Nil    => acc.reverse
         case One(a) => (a :: acc).reverse
-        case Choice(a, r) =>
-          runM(maxDepth, maxResults.map(_ - 1), r, a :: acc)
-        case Incomplete(i) =>
+        case c: Choice[A @unchecked] =>
+          runM(maxDepth, maxResults.map(_ - 1), c.rest, c.a :: acc)
+        case i: Incomplete[A @unchecked] =>
           if (maxDepth.exists(_ <= 0)) acc.reverse
-          else runM(maxDepth.map(_ - 1), maxResults, i, acc)
+          else runM(maxDepth.map(_ - 1), maxResults, i.step, acc)
       }
   }
 
