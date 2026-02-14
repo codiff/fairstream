@@ -1,6 +1,6 @@
 package com.codiff.fairstream
 
-import cats.{Alternative, Monad, StackSafeMonad}
+import cats.{Alternative, Monad}
 
 sealed trait Fair[+A]
 
@@ -68,9 +68,8 @@ object Fair {
       }
   }
 
-  implicit val fairMonad
-      : Monad[Fair] with Alternative[Fair] with StackSafeMonad[Fair] =
-    new Monad[Fair] with Alternative[Fair] with StackSafeMonad[Fair] {
+  implicit val fairMonad: Monad[Fair] with Alternative[Fair] =
+    new Monad[Fair] with Alternative[Fair] {
       def empty[A]: Fair[A] = Fair.empty
 
       def pure[A](a: A): Fair[A] = Fair.unit(a)
@@ -83,6 +82,12 @@ object Fair {
         case i: Incomplete[A @unchecked] =>
           Incomplete(flatMap(i.step)(f))
       }
+
+      def tailRecM[A, B](a: A)(f: A => Fair[Either[A, B]]): Fair[B] =
+        flatMap(f(a)) {
+          case Right(b)    => pure(b)
+          case Left(nextA) => Incomplete(tailRecM(nextA)(f))
+        }
 
       def combineK[A](x: Fair[A], y: Fair[A]): Fair[A] = mplus(x, y)
     }
