@@ -17,7 +17,7 @@ val Scala213 = "2.13.18"
 ThisBuild / crossScalaVersions := Seq(Scala213, "3.3.7")
 ThisBuild / scalaVersion := Scala213 // the default Scala
 
-lazy val root = tlCrossRootProject.aggregate(core)
+lazy val root = tlCrossRootProject.aggregate(core, fs2)
 
 lazy val core = crossProject(JVMPlatform, JSPlatform)
   .crossType(CrossType.Pure)
@@ -27,6 +27,19 @@ lazy val core = crossProject(JVMPlatform, JSPlatform)
     libraryDependencies ++= Seq(
       "org.typelevel" %%% "cats-core" % "2.13.0",
       "org.typelevel" %%% "cats-effect" % "3.6.3",
+      "org.scalameta" %%% "munit" % "1.2.2" % Test,
+      "org.typelevel" %%% "munit-cats-effect" % "2.1.0" % Test
+    )
+  )
+
+lazy val fs2 = crossProject(JVMPlatform, JSPlatform)
+  .crossType(CrossType.Pure)
+  .in(file("fs2"))
+  .dependsOn(core)
+  .settings(
+    name := "fairstream-fs2",
+    libraryDependencies ++= Seq(
+      "co.fs2" %%% "fs2-core" % "3.12.2",
       "org.scalameta" %%% "munit" % "1.2.2" % Test,
       "org.typelevel" %%% "munit-cats-effect" % "2.1.0" % Test
     )
